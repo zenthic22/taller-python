@@ -1,0 +1,8 @@
+Factura:
+Nombre del Cliente: Arwen
+Identificación del Vehículo: 1s5qe1d5we
+Tipo de Combustible: Gasolina Regular
+Cantidad de Litros: 15.0
+Precio por Litro: Q4.5
+Monto Total a Pagar: Q67.50
+

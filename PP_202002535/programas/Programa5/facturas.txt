@@ -1,0 +1,8 @@
+Factura:
+Nombre del Cliente: Henry Chacon
+Identificación del Vehículo: 1sw3w54eg
+Tipo de Combustible: Diesel
+Cantidad de Litros: 500.0
+Precio por Litro: Q3.8
+Monto Total a Pagar: Q1900.00
+

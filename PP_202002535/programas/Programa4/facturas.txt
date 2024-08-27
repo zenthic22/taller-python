@@ -1,0 +1,8 @@
+Factura:
+Nombre del Cliente: Abdul Chacon
+Identificación del Vehículo: 1a8sd3wdg2
+Tipo de Combustible: Gasolina Premium
+Cantidad de Litros: 20.0
+Precio por Litro: Q5.0
+Monto Total a Pagar: Q100.00
+
