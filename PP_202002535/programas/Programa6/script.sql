@@ -22,3 +22,4 @@ ON DUPLICATE KEY UPDATE nombre=VALUES(nombre), precio=VALUES(precio);
 select * from tipo_combustible;
 drop table clientes;
 drop table tipo_combustible;
+drop database combustible;

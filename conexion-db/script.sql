@@ -13,6 +13,9 @@ select * from cursos;
 
 /*ahora realizaremos una insercion de datos*/
 insert into cursos values(0777, 'Organizacion de Lenguajes y Compiladores 1', 4);
+insert into cursos values(0281, 'Sistemas Operativos 1', 4);
+insert into cursos values(0283, 'Analisis y Diseño 1', 5);
+insert into cursos values(0285, 'Sistemas Operativos 2', 5);
 
 /*actualizaremos el estado de la tabla*/
 select * from cursos;
@@ -27,7 +30,7 @@ delete from cursos;
 /*desactivamos el modo seguro esto lo haremos para poder actualizar*/
 set SQL_SAFE_UPDATES = 0;
 /*realizamos la actualizacion*/
-update cursos set nombre = 'OLC1' where codigo = 0777;
+update cursos set nombre = 'AYD 1' where codigo = 0283;
 
 /*eliminaremos toda la tabla*/
 drop table cursos;
