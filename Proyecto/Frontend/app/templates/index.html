@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-
 {% block content %}
-<h1 style="text-align: center; margin-top: 50px;">Bienvenido a la Academia USAC</h1>
+<h1 class="title" style="text-align: center; margin-top: 50px;">Bienvenido a la Academia USAC</h1>
 <h4 style="text-align: center; margin-top: 2rem; width: 50%; margin-left: 25%;">
     <p>
         Este es un sistema de gestión de cursos para estudiantes y catedráticos. Utiliza las funciones en la barra de navegación para registrarte, iniciar sesión y acceder a los cursos disponibles.
     </p>
+    <a href="{% url 'login' %}" class="btn btn-info">Iniciar Sesión</a>
 </h4>
 {% endblock content %}

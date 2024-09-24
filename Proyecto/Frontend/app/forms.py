@@ -1,5 +1,12 @@
 from django import forms
 
+class CatedraticoForm(forms.Form):
+    nombre = forms.CharField(max_length=100, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    apellido = forms.CharField(max_length=100, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    DPI = forms.CharField(max_length=13, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    password = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}))
+    confirm_password = forms.CharField(label='Confirmar contraseña', widget=forms.PasswordInput())
+
 class RegistroForm(forms.Form):
     nombre = forms.CharField(max_length=100, widget=forms.TextInput(attrs={'class': 'form-control'}))
     apellido = forms.CharField(max_length=100, widget=forms.TextInput(attrs={'class': 'form-control'}))
@@ -10,7 +17,13 @@ class RegistroForm(forms.Form):
     email = forms.EmailField(widget=forms.EmailInput(attrs={'class': 'form-control'}))
     password = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}))
     confirm_password = forms.CharField(label='Confirmar contraseña', widget=forms.PasswordInput())
-    rol_id = forms.ChoiceField(choices=[(1, 'Alumno'), (2, 'Catedrático'), (3, 'Administrador')])
+
+    # Nuevo campo para seleccionar el rol
+    ROL_CHOICES = [
+        (3, 'Alumno'),
+        (1, 'Administrador'),
+    ]
+    rol = forms.ChoiceField(choices=ROL_CHOICES, widget=forms.Select(attrs={'class': 'form-control'}))
 
 class LoginForm(forms.Form):
     nombre_usuario = forms.CharField(max_length=100, widget=forms.TextInput(attrs={'class': 'form-control'}))

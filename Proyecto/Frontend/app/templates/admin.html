@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<div class="container">
+    <h1>Bienvenido {{ nombre_usuario }}</h1>
+    <h2>Usuarios Bloqueados</h2>
+
+    <!-- Botón de Registrar Catedrático -->
+    <div class="mb-3">
+        <a href="{% url 'registrar_catedratico' %}" class="btn btn-primary">Registrar Catedrático</a>
+    </div>
+
+    <!-- Botón de Descargar Excel -->
+    <div class="mb-3">
+        <form action="{% url 'descargar_listado_catedraticos' %}" method="get">
+            <button type="submit" class="btn btn-success">Descargar Listado en Excel</button>
+        </form>
+    </div>
+
+    <!-- Tabla de Usuarios Bloqueados -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Apellido</th>
+                <th>DPI</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for usuario in usuarios_bloqueados %}
+            <tr>
+                <td>{{ usuario.nombre }}</td>
+                <td>{{ usuario.apellido }}</td>
+                <td>{{ usuario.DPI }}</td>
+                <td>
+                    <form action="{% url 'desbloquear_usuario' usuario.id %}" method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">Desbloquear</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

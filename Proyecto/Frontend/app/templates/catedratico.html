@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Bienvenido {{ nombre_usuario }}</h1>
+    {% comment %} <div class="mb-3">
+        <a href="{% url 'listar_cursos' %}" class="btn btn-info">Mis Cursos</a>
+        <a href="{% url 'ver_notas' %}" class="btn btn-warning">Ver Notas</a>
+    </div> {% endcomment %}
+    <h2>Información del Catedrático</h2>
+    <table class="table">
+        <tbody>
+            <tr>
+                <th>Nombre:</th>
+                <td>{{ nombre_usuario }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

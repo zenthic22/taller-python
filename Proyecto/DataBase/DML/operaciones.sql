@@ -1,7 +1,7 @@
 insert into rol (id, nombre) values
-(1, 'Alumno'),
+(1, 'Administrador'),
 (2, 'Catedrático'),
-(3, 'Administrador');
+(3, 'Alumno');
 
 select * from usuario;
 select * from rol;
