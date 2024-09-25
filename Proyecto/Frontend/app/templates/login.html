@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 {% load static %}
+
 {% block content %}
 <div class="container">
-    {% if messages and request.method == 'POST' %}
-        {% for message in messages %}
-            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
-        {% endfor %}
+    {% if messages %}
+        <div class="mb-3">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
     {% endif %}
     
     <h2 class="title-2">Iniciar Sesión</h2>

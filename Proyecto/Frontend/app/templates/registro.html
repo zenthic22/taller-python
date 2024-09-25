@@ -3,6 +3,11 @@
 {% block content %}
 <div class="container">
     <h2 class="title-2">Registro de Usuario</h2>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
     <form method="POST">
         {% csrf_token %}
         {{ form.as_p }}

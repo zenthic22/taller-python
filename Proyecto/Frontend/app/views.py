@@ -1,7 +1,7 @@
 import requests
 from django.shortcuts import render, redirect
 from django.contrib import messages
-from .forms import RegistroForm, LoginForm, CatedraticoForm
+from .forms import RegistroForm, LoginForm, RegistroCatedraticoForm
 
 endpoint = 'http://localhost:3000'
 
@@ -19,15 +19,15 @@ def login(request):
     }
     
     if request.method == 'POST':
-        nombre = request.POST.get('nombre')
-        apellido = request.POST.get('apellido')
+        nombre_usuario = request.POST.get('nombre_usuario')  # Cambiado para obtener el nombre de usuario
         dpi = request.POST.get('dpi')
+        email = request.POST.get('email')  # Se añadió para el inicio de sesión
         password = request.POST.get('password')
 
         datos = {
-            'nombre': nombre,
-            'apellido': apellido,
+            'nombre_usuario': nombre_usuario,  # Cambiado para incluir el nombre de usuario
             'DPI': dpi,
+            'email': email,  # Se añadió para el inicio de sesión
             'password': password,
         }
 
@@ -55,37 +55,102 @@ def registro(request):
     contexto = {
         'tab': 'Registro de Usuario'
     }
+
     if request.method == 'POST':
         form = RegistroForm(request.POST)
         if form.is_valid():
-            if form.cleaned_data['password'] != form.cleaned_data['confirm_password']:
-                messages.error(request, 'Las contraseñas no coinciden')
-                return render(request, 'registro.html', {'form': form})
-
-            datos = {
-                'nombre': form.cleaned_data['nombre'],
-                'apellido': form.cleaned_data['apellido'],
-                'DPI': form.cleaned_data['DPI'],
-                'fecha_nacimiento': form.cleaned_data['fecha_nacimiento'].strftime('%Y-%m-%d'),
-                'telefono': form.cleaned_data['telefono'],
-                'nombre_usuario': form.cleaned_data['nombre_usuario'],
-                'email': form.cleaned_data['email'],
-                'password': form.cleaned_data['password'],
-                'rol_id': form.cleaned_data['rol'],
-            }
-
-            response = requests.post(f'{endpoint}/registro', json=datos)
-            if response.status_code == 200:
-                messages.success(request, 'Usuario registrado exitosamente')
-                return redirect('login')
+            rol_id = int(form.cleaned_data['rol'])  # Convierte a entero
+            
+            # Verificar el rol y dirigir a la vista adecuada
+            if rol_id == 2:  # Catedrático
+                return redirect('registro_catedratico')  # Redirige a la vista de registro de catedráticos
             else:
-                messages.error(request, f"Error: {response.json().get('error', 'Ocurrió un error')}")
+                # Si es otro rol, continua con el registro normal
+                # Verificar que las contraseñas coincidan
+                if form.cleaned_data['password'] != form.cleaned_data['confirm_password']:
+                    messages.error(request, 'Las contraseñas no coinciden')
+                    return render(request, 'registro.html', {'form': form, **contexto})
+
+                datos = {
+                    'nombre': form.cleaned_data['nombre'],
+                    'apellido': form.cleaned_data['apellido'],
+                    'DPI': form.cleaned_data['DPI'],
+                    'fecha_nacimiento': form.cleaned_data['fecha_nacimiento'].strftime('%Y-%m-%d'),
+                    'telefono': form.cleaned_data['telefono'],
+                    'nombre_usuario': form.cleaned_data['nombre_usuario'],
+                    'email': form.cleaned_data['email'],
+                    'password': form.cleaned_data['password'],
+                    'rol_id': rol_id,
+                }
+
+                # Determinar el endpoint basado en el rol
+                if rol_id == 1:  # Administrador
+                    endpoint_url = f'{endpoint}/registro_administrador'
+                elif rol_id == 3:  # Estudiante
+                    endpoint_url = f'{endpoint}/registro_estudiante'
+                else:
+                    messages.error(request, "Rol inválido.")
+                    return render(request, 'registro.html', {'form': form, **contexto})
+
+                # Realizar la solicitud al endpoint de registro
+                response = requests.post(endpoint_url, json=datos)
+
+                if response.status_code == 200:
+                    messages.success(request, 'Usuario registrado exitosamente')
+                    return redirect('login')
+                else:
+                    # Manejar el error de respuesta del servidor
+                    try:
+                        error_message = response.json().get('error', 'Ocurrió un error')
+                    except ValueError:
+                        error_message = 'No se pudo decodificar la respuesta del servidor.'
+                    messages.error(request, f"Error: {error_message}")
         else:
             messages.error(request, "Formulario inválido. Verifica los campos.")
     else:
         form = RegistroForm()
 
     return render(request, 'registro.html', {'form': form, **contexto})
+
+def registro_catedratico(request):
+    contexto = {
+        'tab': 'Registro de Catedrático'
+    }
+
+    if request.method == 'POST':
+        form = RegistroCatedraticoForm(request.POST)
+        if form.is_valid():
+            # Verificar que las contraseñas coincidan
+            if form.cleaned_data['password'] != form.cleaned_data['confirm_password']:
+                messages.error(request, 'Las contraseñas no coinciden')
+                return render(request, 'registro_catedratico.html', {'form': form, **contexto})
+
+            datos = {
+                'nombre': form.cleaned_data['nombre'],
+                'apellido': form.cleaned_data['apellido'],
+                'DPI': form.cleaned_data['DPI'],
+                'password': form.cleaned_data['password'],
+                'rol_id': 2,  # ID de rol para Administrador
+            }
+
+            # Realizar la solicitud al endpoint de registro
+            response = requests.post(f'{endpoint}/registro_catedratico', json=datos)
+
+            if response.status_code == 200:
+                messages.success(request, 'Catedrático registrado exitosamente')
+                return redirect('vista_administrador')  # Redirige a la vista de administración
+            else:
+                try:
+                    error_message = response.json().get('error', 'Ocurrió un error')
+                except ValueError:
+                    error_message = 'No se pudo decodificar la respuesta del servidor.'
+                messages.error(request, f"Error: {error_message}")
+        else:
+            messages.error(request, "Formulario inválido. Verifica los campos.")
+    else:
+        form = RegistroCatedraticoForm()
+
+    return render(request, 'registro_catedratico.html', {'form': form, **contexto})
 
 def vista_alumno(request):
     contexto = {
@@ -109,61 +174,27 @@ def vista_administrador(request):
     else:
         usuarios_bloqueados = []
 
-    # Imprimir para depuración
-    print("Usuarios bloqueados:", usuarios_bloqueados)
-
     contexto = {
         'tab': 'Administracion',
         'usuarios_bloqueados': usuarios_bloqueados,
         'nombre_usuario': request.session.get('nombre_usuario', 'Usuario desconocido')
     }
-    print("Contexto a renderizar:", contexto)
 
     return render(request, 'admin.html', contexto)
 
-
-def registrar_catedratico(request):
-    contexto = {
-        'tab': 'Registro de Catedrático',
-    }
-    
-    if request.method == 'POST':
-        form = CatedraticoForm(request.POST)
-        if form.is_valid():
-            if form.cleaned_data['password'] != form.cleaned_data['confirm_password']:
-                messages.error(request, 'Las contraseñas no coinciden')
-                return render(request, 'registro_catedratico.html', {'form': form})
-
-            datos = {
-                'nombre': form.cleaned_data['nombre'],
-                'apellido': form.cleaned_data['apellido'],
-                'DPI': form.cleaned_data['DPI'],
-                'password': form.cleaned_data['password'],
-                'rol_id': 2,
-            }
-
-            response = requests.post(f'{endpoint}/registro_catedratico', json=datos)
-            if response.status_code == 200:
-                messages.success(request, 'Catedrático registrado exitosamente')
-                return redirect('vista_administrador')
-            else:
-                messages.error(request, f"Error: {response.json().get('error', 'Ocurrió un error')}")
-
-    else:
-        form = CatedraticoForm()
-
-    return render(request, 'registro_catedratico.html', {'form': form, **contexto})
-
 def recuperar_password(request):
-    contexto = {
-        'tab': 'Recuperación de Contraseña'
-    }
+    contexto = {'tab': 'Recuperación de Contraseña'}
     
     if request.method == 'POST':
-        dato = request.POST.get('dato')  # Cambia 'email' a 'dato' para generalizar
+        dato = request.POST.get('dato')
 
-        # Intenta recuperar como DPI primero
-        response = requests.post(f'{endpoint}/recuperar_password_catedratico', json={'DPI': dato})
+        # Validar que se haya proporcionado algún dato
+        if not dato:
+            messages.error(request, 'Se requiere DPI o email para continuar.')
+            return render(request, 'recuperar_password.html', contexto)
+
+        # Primero intenta recuperar como DPI
+        response = requests.post(f'{endpoint}/recuperar_password', json={'DPI': dato})
         
         if response.status_code == 200:
             messages.success(request, f'Se ha enviado un enlace de recuperación de contraseña a {dato}')
@@ -181,9 +212,7 @@ def recuperar_password(request):
     return render(request, 'recuperar_password.html', contexto)
 
 def restablecer_password(request, token):
-    contexto = {
-        'tab': 'Restablecer Contraseña'
-    }
+    contexto = {'tab': 'Restablecer Contraseña'}
     
     if request.method == 'POST':
         nueva_password = request.POST.get('nueva_password')

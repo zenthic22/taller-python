@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from functools import wraps
 import jwt
 import datetime
 import smtplib
@@ -57,46 +58,64 @@ def rol_existe(rol_id):
 
 @app.route('/recuperar_password', methods=['POST'])
 def recuperar_password():
+    # Obtiene los datos del cuerpo de la solicitud
     email = request.json.get('email')
-    
-    cursor = db_config.cursor()
-    cursor.execute("SELECT * FROM Usuario WHERE email = %s", (email,))
-    usuario = cursor.fetchone()
-    
-    if usuario:
-        token = jwt.encode({
-            'user_id': usuario[0],
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
-        }, SECRET_KEY, algorithm='HS256')
-        
-        reset_link = f'http://localhost:8000/restablecer_password/{token}'
-        enviar_correo(email, 'Restablecer tu contraseña', f'Haz clic en el siguiente enlace para restablecer tu contraseña: {reset_link}')
-        
-        return jsonify({"mensaje": "Se ha enviado un correo con el enlace para restablecer la contraseña."}), 200
-    else:
-        return jsonify({"error": "El correo no está registrado."}), 400
-    
-@app.route('/recuperar_password_catedratico', methods=['POST'])
-def recuperar_password_catedratico():
     dpi = request.json.get('DPI')
 
+    if not email and not dpi:
+        return jsonify({"error": "Se requiere email o DPI."}), 400
+
     cursor = db_config.cursor()
-    cursor.execute("SELECT * FROM Usuario WHERE DPI = %s AND rol_id = 2", (dpi,))
-    catedratico = cursor.fetchone()
 
-    if catedratico:
-        token = jwt.encode({
-            'user_id': catedratico[0],
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
-        }, SECRET_KEY, algorithm='HS256')
+    try:
+        # Primero, intentar buscar por email en la tabla Estudiante
+        if email:
+            cursor.execute("SELECT * FROM Estudiante WHERE email = %s", (email,))
+            estudiante = cursor.fetchone()
+            if estudiante:
+                # Generar token
+                token = jwt.encode({
+                    'user_id': estudiante[0],  # Asumiendo que el id es el primer campo
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+                }, SECRET_KEY, algorithm='HS256')
 
-        reset_link = f'http://localhost:8000/restablecer_password_catedratico/{token}'
-        enviar_correo('3508630320101@ingenieria.usac.edu.gt', 'Restablecer contraseña catedrático', 
-                      f'Haz clic en el siguiente enlace para restablecer tu contraseña: {reset_link}')
+                reset_link = f'http://localhost:8000/restablecer_password/{token}'
+                enviar_correo(email, 'Restablecer contraseña', 
+                              f'Haz clic en el siguiente enlace para restablecer tu contraseña: {reset_link}')
+
+                return jsonify({"mensaje": "Si el email está registrado, se enviará un correo con instrucciones."}), 200
+
+        # Si no se encuentra por email, buscar por DPI en la tabla Usuario
+        if dpi:
+            cursor.execute("SELECT * FROM Usuario WHERE DPI = %s", (dpi,))
+            usuario = cursor.fetchone()
+            if usuario:
+                # Verificar si el usuario tiene un catedrático asociado
+                cursor.execute("SELECT * FROM Catedratico WHERE usuario_id = %s", (usuario[0],))
+                catedratico = cursor.fetchone()
+                if catedratico:
+                    # Generar token
+                    token = jwt.encode({
+                        'user_id': usuario[0],  # Asumiendo que el id es el primer campo
+                        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+                    }, SECRET_KEY, algorithm='HS256')
+
+                    reset_link = f'http://localhost:8000/restablecer_password/{token}'
+                    # Aquí puedes usar el email registrado en la tabla Usuario o un correo por defecto
+                    enviar_correo('3508630320101@ingenieria.usac.edu.gt', 'Restablecer contraseña',  # usuario[4] sería el campo de email en la tabla Estudiante
+                                  f'Haz clic en el siguiente enlace para restablecer tu contraseña: {reset_link}')
+
+                    return jsonify({"mensaje": "Si el DPI está registrado, se enviará un correo con instrucciones."}), 200
+                else:
+                    return jsonify({"error": "El DPI proporcionado no corresponde a un catedrático."}), 404
         
-        return jsonify({"mensaje": "Se ha enviado un correo con el enlace para restablecer la contraseña."}), 200
-    else:
-        return jsonify({"error": "El DPI no está registrado."}), 400
+        return jsonify({"error": "No se encontró ningún usuario asociado a los datos proporcionados."}), 404
+
+    except Exception as e:
+        return jsonify({"error": "Error al procesar la solicitud."}), 500
+
+    finally:
+        cursor.close()
 
 @app.route('/actualizar_password', methods=['POST'])
 def restablecer_password():
@@ -128,9 +147,38 @@ def restablecer_password():
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error inesperado: {str(e)}"}), 500
 
-@app.route('/registro', methods=['POST'])
-def registrar_usuario():
+@app.route('/registro_administrador', methods=['POST'])
+def registrar_administrador():
     datos = request.json
+    
+    nombre = datos.get('nombre')
+    apellido = datos.get('apellido')
+    dpi = datos.get('DPI')
+    password = datos.get('password')
+
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    
+    cursor = db_config.cursor()
+    
+    try:
+        cursor.execute(""" 
+            INSERT INTO Usuario (nombre, apellido, DPI, password, rol_id, login_attempts, account_locked)
+            VALUES (%s, %s, %s, %s, %s, 0, FALSE)
+        """, (nombre, apellido, dpi, hashed_password, 1))  # rol_id = 1 para administradores
+        
+        db_config.commit()
+        return jsonify({"mensaje": "Administrador registrado exitosamente"}), 200
+    except Exception as e:
+        db_config.rollback()
+        print(f"Error al insertar datos: {e}")
+        return jsonify({"error": str(e)}), 400
+    finally:
+        cursor.close()
+
+@app.route('/registro_estudiante', methods=['POST'])
+def registrar_estudiante():
+    datos = request.json
+    # Obtener todos los datos necesarios del estudiante
     nombre = datos.get('nombre')
     apellido = datos.get('apellido')
     dpi = datos.get('DPI')
@@ -139,23 +187,32 @@ def registrar_usuario():
     nombre_usuario = datos.get('nombre_usuario')
     email = datos.get('email')
     password = datos.get('password')
-    rol_id = datos.get('rol_id')
+    
+    # Verifica si el nombre de usuario es único
+    cursor = db_config.cursor()
+    cursor.execute("SELECT COUNT(*) FROM Estudiante WHERE nombre_usuario = %s", (nombre_usuario,))
+    if cursor.fetchone()[0] > 0:
+        return jsonify({"error": "El nombre de usuario ya está en uso."}), 400
 
-    if not rol_existe(rol_id):
-        return jsonify({"error": "Rol no válido"}), 400
-
+    # Encriptar la contraseña
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     
-    cursor = db_config.cursor()
-    
+    # Registro del usuario
     try:
         cursor.execute(""" 
-            INSERT INTO Usuario (nombre, apellido, DPI, fecha_nacimiento, telefono, nombre_usuario, email, password, rol_id, login_attempts, account_locked)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, FALSE)
-        """, (nombre, apellido, dpi, fecha_nacimiento, telefono, nombre_usuario, email, hashed_password, rol_id))
+            INSERT INTO Usuario (nombre, apellido, DPI, password, rol_id, login_attempts, account_locked)
+            VALUES (%s, %s, %s, %s, %s, 0, FALSE)
+        """, (nombre, apellido, dpi, hashed_password, 3))  # Asumimos rol_id = 1 para estudiantes
+        usuario_id = cursor.lastrowid
 
+        # Registro del estudiante
+        cursor.execute(""" 
+            INSERT INTO Estudiante (usuario_id, fecha_nacimiento, telefono, nombre_usuario, email)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (usuario_id, fecha_nacimiento, telefono, nombre_usuario, email))
+        
         db_config.commit()
-        return jsonify({"mensaje": "Usuario registrado exitosamente"}), 200
+        return jsonify({"mensaje": "Estudiante registrado exitosamente"}), 200
     except Exception as e:
         db_config.rollback()
         print(f"Error al insertar datos: {e}")
@@ -166,15 +223,21 @@ def registrar_usuario():
 @app.route('/registro_catedratico', methods=['POST'])
 def registrar_catedratico():
     datos = request.json
+    #print("Datos recibidos:", datos)  # Para depuración
+
+    rol_id = datos.get('rol_id')
+    #print("Rol ID recibido:", rol_id)  # Para depuración
+
+    # Cambia aquí: Permitir que el rol_id se envíe como 2
+    if rol_id not in [1, 2]:  # Permitir registro solo si el rol es Administrador o Catedrático
+        return jsonify({"error": "No tienes permiso para registrar un catedrático."}), 403
 
     nombre = datos.get('nombre')
     apellido = datos.get('apellido')
     dpi = datos.get('DPI')
     password = datos.get('password')
+    especialidad = datos.get('especialidad')
 
-    if not all([nombre, apellido, dpi, password]):
-        return jsonify({"error": "Faltan campos requeridos."}), 400
-    
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     
     cursor = db_config.cursor()
@@ -183,14 +246,22 @@ def registrar_catedratico():
         cursor.execute(""" 
             INSERT INTO Usuario (nombre, apellido, DPI, password, rol_id, login_attempts, account_locked)
             VALUES (%s, %s, %s, %s, %s, 0, FALSE)
-        """, (nombre, apellido, dpi, hashed_password, 2))
+        """, (nombre, apellido, dpi, hashed_password, 2))  # rol_id = 2 para catedráticos
+        usuario_id = cursor.lastrowid
 
+        cursor.execute(""" 
+            INSERT INTO Catedratico (usuario_id, especialidad)
+            VALUES (%s, %s)
+        """, (usuario_id, especialidad))
+        
         db_config.commit()
         return jsonify({"mensaje": "Catedrático registrado exitosamente"}), 200
     except Exception as e:
         db_config.rollback()
         print(f"Error al insertar datos: {e}")
         return jsonify({"error": str(e)}), 400
+    finally:
+        cursor.close()
     
 @app.route('/login', methods=['POST'])
 def iniciar_sesion():
@@ -229,12 +300,14 @@ def iniciar_sesion():
         cursor.execute("UPDATE Usuario SET login_attempts = login_attempts + 1 WHERE id = %s", (usuario['id'],))
         db_config.commit()
 
+        # Si los intentos fallidos son 3 o más, bloquear la cuenta
         if usuario['login_attempts'] >= 2:
             cursor.execute("UPDATE Usuario SET account_locked = TRUE WHERE id = %s", (usuario['id'],))
             db_config.commit()
             return jsonify({"mensaje": "Cuenta bloqueada. Contacte al administrador."}), 403
-        
+
         return jsonify({"mensaje": "Usuario o contraseña incorrectos"}), 401
+
 
 @app.route('/descargar_listado_catedraticos')
 def descargar_listado_catedraticos():
@@ -258,7 +331,7 @@ def descargar_listado_catedraticos():
 @app.route('/listado_usuarios_bloqueados', methods=['GET'])
 def listado_usuarios_bloqueados():
     cursor = db_config.cursor(pymysql.cursors.DictCursor)
-    cursor.execute("SELECT id, nombre, apellido, DPI, rol_id FROM Usuario WHERE account_locked = TRUE")
+    cursor.execute("SELECT id, nombre, apellido, DPI, rol_id FROM Usuario WHERE account_locked = TRUE AND rol_id != 1")  # Asumiendo rol_id = 1 es para administradores
     usuarios_bloqueados = cursor.fetchall()
     return jsonify(usuarios_bloqueados), 200
 
@@ -267,14 +340,16 @@ def desbloquear_usuario(usuario_id):
     cursor = db_config.cursor()
 
     try:
-        # Verificar si el usuario existe
         cursor.execute("SELECT * FROM Usuario WHERE id = %s", (usuario_id,))
         usuario = cursor.fetchone()
 
         if not usuario:
             return jsonify({"error": "Usuario no encontrado."}), 404
         
-        # Desbloquear el usuario y reiniciar login_attempts
+        # Verificar si el usuario es un administrador
+        if usuario[5] == 1:  # Suponiendo que el rol_id del administrador es 1
+            return jsonify({"error": "No se puede desbloquear a un administrador."}), 403
+        
         cursor.execute("UPDATE Usuario SET account_locked = FALSE, login_attempts = 0 WHERE id = %s", (usuario_id,))
         db_config.commit()
 

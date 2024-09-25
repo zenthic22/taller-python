@@ -1,21 +1,19 @@
 {% extends "base.html" %}
 {% load static %}
-
 {% block content %}
-<div class="container mt-4">
-    <h1>Bienvenido {{ nombre_usuario }}</h1>
-    {% comment %} <div class="mb-3">
-        <a href="{% url 'listar_cursos' %}" class="btn btn-info">Mis Cursos</a>
-        <a href="{% url 'ver_notas' %}" class="btn btn-warning">Ver Notas</a>
-    </div> {% endcomment %}
-    <h2>Información del Catedrático</h2>
-    <table class="table">
-        <tbody>
-            <tr>
-                <th>Nombre:</th>
-                <td>{{ nombre_usuario }}</td>
-            </tr>
-        </tbody>
-    </table>
+<h1>Bienvenido, {{ nombre_usuario }}</h1>
+<p>Aquí puedes gestionar tus cursos y notas.</p>
+
+<!-- Agrega aquí más contenido o funcionalidades específicas para los catedráticos -->
+<div>
+    <h2>Gestión de Cursos</h2>
+    <p>Puedes agregar, editar o eliminar cursos desde esta sección.</p>
+    <!-- Aquí podrías incluir botones o enlaces a otras vistas relacionadas -->
+</div>
+
+<div>
+    <h2>Gestión de Notas</h2>
+    <p>Puedes consultar y actualizar las notas de tus estudiantes aquí.</p>
+    <!-- Aquí podrías incluir botones o enlaces a otras vistas relacionadas -->
 </div>
 {% endblock %}
