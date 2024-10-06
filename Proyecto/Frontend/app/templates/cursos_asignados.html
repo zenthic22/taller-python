@@ -1,0 +1,36 @@
+<!-- cursos_catedratico.html -->
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+<h1>{{ tab }}</h1>
+<p>Bienvenido, {{ nombre_usuario }}</p>
+
+{% if cursos %}
+    <table>
+        <thead>
+            <tr>
+                <th>Nombre del Curso</th>
+                <th>Código</th>
+                <th>Costo</th>
+                <th>Horario</th>
+                <th>Cupo</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for curso in cursos %}
+                <tr>
+                    <td>{{ curso.nombre }}</td>
+                    <td>{{ curso.codigo }}</td>
+                    <td>{{ curso.costo }}</td>
+                    <td>{{ curso.horario }}</td>
+                    <td>{{ curso.cupo }}</td>
+                    <td><a href="{% url 'pagina_curso' curso.id %}">Ver Detalles</a></td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>No tienes cursos asignados.</p>
+{% endif %}
+{% endblock %}

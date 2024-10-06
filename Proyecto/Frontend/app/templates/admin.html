@@ -3,7 +3,6 @@
 {% block content %}
 <div class="container">
     <h1>Bienvenido {{ nombre_usuario }}</h1>
-    <h2>Usuarios Bloqueados</h2>
 
     <!-- Botón de Registrar Catedrático -->
     <div class="mb-3">
@@ -17,6 +16,17 @@
         </form>
     </div>
 
+    <!-- Botón de Crear Curso -->
+    <div class="mb-3">
+        <a href="{% url 'crear_curso' %}" class="btn btn-primary">Crear Curso</a>
+    </div>
+
+    <div class="mb-3">
+        <a href="{% url 'listar_catedraticos' %}" class="btn btn-primary">Lista de Catedraticos</a>
+    </div>
+
+    <h2>Usuarios Bloqueados</h2>
+    
     <!-- Tabla de Usuarios Bloqueados -->
     <table class="table table-striped">
         <thead>

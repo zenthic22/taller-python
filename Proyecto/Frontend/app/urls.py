@@ -14,4 +14,7 @@ urlpatterns = [
     path('vista_administrador/', views.vista_administrador, name='vista_administrador'),  # Vista para el administrador
     path('desbloquear_usuario/<int:user_id>/', views.desbloquear_usuario, name='desbloquear_usuario'),
     path('descargar_listado_catedraticos/', views.descargar_listado_catedraticos, name='descargar_listado_catedraticos'),
+    path('crear_curso/', views.crear_curso, name='crear_curso'),
+    path('listar_catedraticos/', views.lista_catedraticos, name='listar_catedraticos'),
+    # path('gestionar_notas/', views.gestionar_notas, name='gestionar_notas'),
 ]

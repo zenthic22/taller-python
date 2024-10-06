@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from functools import wraps
+import base64
 import jwt
 import datetime
 import smtplib
@@ -53,6 +53,36 @@ def rol_existe(rol_id):
     except Exception as e:
         print(f"Error al verificar rol: {e}")
         return False
+    finally:
+        cursor.close()
+
+def insertar_administrador():
+    nombre = "Juan"
+    apellido = "Pérez"
+    dpi = "1234567890101"
+    password = "contra12"  # Usa una contraseña hasheada válida
+    rol_id = 1  # Asumiendo que el rol de administrador tiene id = 1
+
+    # Encriptar la contraseña
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+    cursor = db_config.cursor()
+    try:
+        # Verificar si ya existe el usuario
+        cursor.execute("SELECT COUNT(*) FROM Usuario WHERE DPI = %s", (dpi,))
+        if cursor.fetchone()[0] == 0:
+            # Inserta el usuario administrador
+            cursor.execute("""
+                INSERT INTO Usuario (nombre, apellido, DPI, password, rol_id, login_attempts, account_locked)
+                VALUES (%s, %s, %s, %s, %s, 0, FALSE)
+            """, (nombre, apellido, dpi, hashed_password, rol_id))
+            db_config.commit()
+            print("Administrador insertado exitosamente.")
+        else:
+            print("El administrador ya existe.")
+    except Exception as e:
+        db_config.rollback()
+        print(f"Error al insertar el administrador: {e}")
     finally:
         cursor.close()
 
@@ -147,34 +177,6 @@ def restablecer_password():
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error inesperado: {str(e)}"}), 500
 
-@app.route('/registro_administrador', methods=['POST'])
-def registrar_administrador():
-    datos = request.json
-    
-    nombre = datos.get('nombre')
-    apellido = datos.get('apellido')
-    dpi = datos.get('DPI')
-    password = datos.get('password')
-
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-    
-    cursor = db_config.cursor()
-    
-    try:
-        cursor.execute(""" 
-            INSERT INTO Usuario (nombre, apellido, DPI, password, rol_id, login_attempts, account_locked)
-            VALUES (%s, %s, %s, %s, %s, 0, FALSE)
-        """, (nombre, apellido, dpi, hashed_password, 1))  # rol_id = 1 para administradores
-        
-        db_config.commit()
-        return jsonify({"mensaje": "Administrador registrado exitosamente"}), 200
-    except Exception as e:
-        db_config.rollback()
-        print(f"Error al insertar datos: {e}")
-        return jsonify({"error": str(e)}), 400
-    finally:
-        cursor.close()
-
 @app.route('/registro_estudiante', methods=['POST'])
 def registrar_estudiante():
     datos = request.json
@@ -202,7 +204,7 @@ def registrar_estudiante():
         cursor.execute(""" 
             INSERT INTO Usuario (nombre, apellido, DPI, password, rol_id, login_attempts, account_locked)
             VALUES (%s, %s, %s, %s, %s, 0, FALSE)
-        """, (nombre, apellido, dpi, hashed_password, 3))  # Asumimos rol_id = 1 para estudiantes
+        """, (nombre, apellido, dpi, hashed_password, 3))  # Asumimos rol_id = 3s para estudiantes
         usuario_id = cursor.lastrowid
 
         # Registro del estudiante
@@ -223,10 +225,10 @@ def registrar_estudiante():
 @app.route('/registro_catedratico', methods=['POST'])
 def registrar_catedratico():
     datos = request.json
-    #print("Datos recibidos:", datos)  # Para depuración
+    print("Datos recibidos:", datos)  # Para depuración
 
     rol_id = datos.get('rol_id')
-    #print("Rol ID recibido:", rol_id)  # Para depuración
+    print("Rol ID recibido:", rol_id)  # Para depuración
 
     # Cambia aquí: Permitir que el rol_id se envíe como 2
     if rol_id not in [1, 2]:  # Permitir registro solo si el rol es Administrador o Catedrático
@@ -249,6 +251,7 @@ def registrar_catedratico():
         """, (nombre, apellido, dpi, hashed_password, 2))  # rol_id = 2 para catedráticos
         usuario_id = cursor.lastrowid
 
+        print("Insertando catedrático...")
         cursor.execute(""" 
             INSERT INTO Catedratico (usuario_id, especialidad)
             VALUES (%s, %s)
@@ -266,37 +269,46 @@ def registrar_catedratico():
 @app.route('/login', methods=['POST'])
 def iniciar_sesion():
     datos = request.json
-    nombre_usuario = datos.get('nombre_usuario')
-    dpi = datos.get('DPI')
-    email = datos.get('email')
+    entrada = datos.get('nombre_usuario') or datos.get('DPI')  # Un solo campo para ambos
     password = datos.get('password').encode('utf-8')
 
     cursor = db_config.cursor(pymysql.cursors.DictCursor)
 
-    if nombre_usuario:
-        cursor.execute("SELECT * FROM Usuario WHERE nombre_usuario = %s", (nombre_usuario,))
-    elif dpi:
-        cursor.execute("SELECT * FROM Usuario WHERE DPI = %s", (dpi,))
-    elif email:
-        cursor.execute("SELECT * FROM Usuario WHERE email = %s", (email,))
-    else:
-        return jsonify({"mensaje": "Falta el nombre de usuario, DPI o email."}), 400
+    # Buscar al usuario en la tabla Estudiante por nombre de usuario
+    cursor.execute("SELECT * FROM Estudiante WHERE nombre_usuario = %s", (entrada,))
+    estudiante = cursor.fetchone()
 
-    usuario = cursor.fetchone()
+    # Si no se encuentra en Estudiante, buscar en Usuario por DPI
+    if not estudiante:
+        cursor.execute("SELECT * FROM Usuario WHERE DPI = %s", (entrada,))
+        usuario = cursor.fetchone()
+    else:
+        # Si se encuentra, buscar los detalles de usuario asociado
+        usuario_id = estudiante['usuario_id']  # Obtener el id del usuario asociado
+        cursor.execute("SELECT * FROM Usuario WHERE id = %s", (usuario_id,))
+        usuario = cursor.fetchone()
 
     if not usuario:
-        return jsonify({"mensaje": "Usuario o contraseña incorrectos"}), 401
+        return jsonify({"mensaje": "Usuario o contraseña incorrectos."}), 401
 
     if usuario['account_locked']:
         return jsonify({"mensaje": "Cuenta bloqueada. Contacte al administrador."}), 403
 
+    # Verificar la contraseña
     if bcrypt.checkpw(password, usuario['password'].encode('utf-8')):
+        # Restablecer intentos de inicio de sesión
         cursor.execute("UPDATE Usuario SET login_attempts = 0 WHERE id = %s", (usuario['id'],))
         db_config.commit()
+        
+        # Obtener el rol del usuario
+        rol_id = usuario.get('rol_id', 1)  # Asignar un valor por defecto si no se encuentra el rol
+        nombre = usuario.get('nombre', 'Usuario desconocido')
+        
         return jsonify({"mensaje": "Inicio de sesión exitoso", 
-                        "rol_id": usuario['rol_id'],
-                        "nombre": usuario['nombre']}), 200
+                        "rol_id": rol_id,
+                        "nombre": nombre}), 200
     else:
+        # Incrementar intentos de inicio de sesión
         cursor.execute("UPDATE Usuario SET login_attempts = login_attempts + 1 WHERE id = %s", (usuario['id'],))
         db_config.commit()
 
@@ -306,27 +318,34 @@ def iniciar_sesion():
             db_config.commit()
             return jsonify({"mensaje": "Cuenta bloqueada. Contacte al administrador."}), 403
 
-        return jsonify({"mensaje": "Usuario o contraseña incorrectos"}), 401
+        return jsonify({"mensaje": "Usuario o contraseña incorrectos."}), 401
 
-
-@app.route('/descargar_listado_catedraticos')
-def descargar_listado_catedraticos():
+@app.route('/descargar_catedraticos', methods=['GET'])
+def descargar_catedraticos():
     cursor = db_config.cursor()
-    cursor.execute("SELECT nombre, apellido, DPI FROM Usuario WHERE rol_id = 2")
-    catedraticos = cursor.fetchall()
 
-    workbook = openpyxl.Workbook()
-    sheet = workbook.active
-    sheet.append(["Nombre", "Apellido", "DPI"])
+    try:
+        cursor.execute("SELECT u.nombre, u.apellido, u.DPI, c.especialidad FROM Usuario u JOIN Catedratico c ON u.id = c.usuario_id")
+        catedraticos = cursor.fetchall()
 
-    for catedratico in catedraticos:
-        sheet.append(catedratico)
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = "Catedraticos"
+        sheet.append(["Nombre", "Apellido", "DPI", "Especialidad"])
 
-    stream = io.BytesIO()
-    workbook.save(stream)
-    stream.seek(0)
+        for catedratico in catedraticos:
+            sheet.append(catedratico)
 
-    return send_file(stream, as_attachment=True, download_name="catedraticos.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        file_stream = io.BytesIO()
+        workbook.save(file_stream)
+        file_stream.seek(0)
+
+        return send_file(file_stream, as_attachment=True, download_name='catedraticos.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    except Exception as e:
+        print(f"Error al generar el archivo: {e}")
+        return jsonify({"error": "Error al generar el archivo de catedráticos"}), 500
+    finally:
+        cursor.close()
 
 @app.route('/listado_usuarios_bloqueados', methods=['GET'])
 def listado_usuarios_bloqueados():
@@ -359,5 +378,99 @@ def desbloquear_usuario(usuario_id):
         db_config.rollback()  # Hacer rollback en caso de error
         return jsonify({"error": str(e)}), 500
 
+@app.route('/crear_curso', methods=['POST'])
+def crear_curso():
+    # Recibir los datos del curso desde la solicitud
+    datos_curso = request.json
+    
+    # Extraer los campos necesarios
+    nombre = datos_curso.get('nombre')
+    codigo = datos_curso.get('codigo')
+    costo = datos_curso.get('costo')
+    horario = datos_curso.get('horario')
+    cupo = datos_curso.get('cupo')
+    catedratico_id = datos_curso.get('catedratico_id')
+    banner_base64 = datos_curso.get('banner')
+    mensaje_bienvenida = datos_curso.get('mensaje_bienvenida')
+    estado = datos_curso.get('estado')
+
+    # Imprimir los datos recibidos para verificar
+    print("Datos del curso recibidos:")
+    print(f"Nombre: {nombre}")
+    print(f"Código: {codigo}")
+    print(f"Costo: {costo}")
+    print(f"Horario: {horario}")
+    print(f"Cupo: {cupo}")
+    print(f"Catedrático ID: {catedratico_id}")
+    print(f"Mensaje de bienvenida: {mensaje_bienvenida}")
+    print(f"Estado: {estado}")
+    
+    # Decodificar el banner en Base64
+    if banner_base64:
+        banner_data = base64.b64decode(banner_base64)
+        # Guardar la imagen en un archivo
+        banner_filename = f"banner_{codigo}.png"  # El nombre del archivo puede depender del código del curso, por ejemplo
+        banner_path = os.path.join('C:/Users/Abdul Chacon/OneDrive - Facultad de Ingeniería de la Universidad de San Carlos de Guatemala/Documentos/Github/taller-python/Proyecto/banners', banner_filename)
+        with open(banner_path, 'wb') as banner_file:
+            banner_file.write(banner_data)
+        print(f"Banner guardado en: {banner_path}")
+    else:
+        banner_path = None  # Si no se envía banner, puede ser opcional
+
+    cursor = db_config.cursor()
+    try:
+        # Guardar el curso en la base de datos
+        cursor.execute("""
+            INSERT INTO Curso (nombre, codigo, costo, horario, cupo, catedratico_id, banner, mensaje_bienvenida, estado)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (nombre, codigo, costo, horario, cupo, catedratico_id, banner_path, mensaje_bienvenida, estado))
+        db_config.commit()
+        print("Curso insertado exitosamente.")
+        return jsonify({"mensaje": "Curso creado exitosamente."}), 200
+    except Exception as e:
+        db_config.rollback()
+        print(f"Error al insertar el curso: {e}")
+        return jsonify({"error": "Error al crear el curso."}), 500
+    finally:
+        cursor.close()
+
+@app.route('/listar_catedraticos_cursos', methods=['GET'])
+def listar_catedraticos_cursos():
+    cursor = db_config.cursor(pymysql.cursors.DictCursor)
+
+    try:
+        # Consultar la lista de catedráticos y los cursos que imparten
+        cursor.execute("""
+            SELECT 
+                u.nombre AS catedratico_nombre,
+                u.apellido AS catedratico_apellido,
+                u.DPI AS catedratico_dpi,
+                c.especialidad AS catedratico_especialidad,
+                cu.nombre AS curso_nombre,
+                cu.codigo AS curso_codigo,
+                cu.horario AS curso_horario,
+                cu.costo AS curso_costo,
+                cu.cupo AS curso_cupo
+            FROM Catedratico c
+            JOIN Usuario u ON c.usuario_id = u.id
+            LEFT JOIN Curso cu ON cu.catedratico_id = c.id
+        """)
+        resultados = cursor.fetchall()
+
+        # Verificar si hay datos
+        if not resultados:
+            return jsonify({"mensaje": "No hay catedráticos o cursos registrados."}), 404
+
+        # Devolver los resultados en formato JSON
+        return jsonify(resultados), 200
+
+    except Exception as e:
+        print(f"Error al obtener la lista de catedráticos y cursos: {e}")
+        return jsonify({"error": "Error al obtener la lista de catedráticos y cursos."}), 500
+
+    finally:
+        cursor.close()
+
 if __name__ == '__main__':
+    insertar_administrador()
     app.run(host='0.0.0.0', port=3000, debug=True)

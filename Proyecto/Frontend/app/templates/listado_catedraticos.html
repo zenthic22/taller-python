@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<div class="container">
+    <h2 class="title-2">Listado de Catedráticos</h2>
+
+    <!-- Mostrar mensajes de éxito o error -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Tabla de catedráticos y sus cursos -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Apellido</th>
+                <th>Cursos Asignados</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for catedratico in catedraticos_cursos %}
+            <tr>
+                <td>{{ catedratico.catedratico_nombre }}</td>
+                <td>{{ catedratico.catedratico_apellido }}</td>
+                <td>
+                    <ul>
+                        {% if catedratico.curso_nombre %}
+                            <li>{{ catedratico.curso_nombre }}</li>
+                        {% else %}
+                            <li>No tiene cursos asignados</li>
+                        {% endif %}
+                    </ul>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="2">No hay catedráticos registrados.</td>
+            </tr>
+            {% endfor %}
+        </tbody>        
+    </table>
+</div>
+{% endblock %}

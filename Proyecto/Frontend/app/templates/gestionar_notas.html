@@ -2,16 +2,20 @@
 {% load static %}
 {% block content %}
 <div class="container">
-    <h2 class="title-2">Registrar Catedrático</h2>
+    <h2 class="title-2">Gestión de Notas</h2>
+
+    <!-- Mostrar mensajes de éxito o error -->
     {% if messages %}
         {% for message in messages %}
             <div class="alert alert-{{ message.tags }}">{{ message }}</div>
         {% endfor %}
     {% endif %}
+
+    <!-- Formulario para gestionar notas -->
     <form method="post">
         {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">Registrar</button>
+        {{ form.as_p }}  <!-- Renderiza el formulario de gestión de notas -->
+        <button type="submit" class="btn btn-primary">Actualizar Nota</button>
     </form>
 </div>
 {% endblock %}
