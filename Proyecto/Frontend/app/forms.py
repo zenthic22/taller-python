@@ -1,5 +1,12 @@
 from django import forms
 
+class BannerForm(forms.Form):
+    banner = forms.ImageField(
+        label='Selecciona el nuevo banner',
+        required=True,  # El campo es requerido para que el profesor suba una imagen
+        widget=forms.ClearableFileInput(attrs={'class': 'form-control-file'})
+    )
+
 class CursoForm(forms.Form):
     nombre = forms.CharField(label='Nombre', max_length=100, widget=forms.TextInput(attrs={'class': 'form-control'}))
     codigo = forms.CharField(label='Código', max_length=100, widget=forms.TextInput(attrs={'class': 'form-control'}))

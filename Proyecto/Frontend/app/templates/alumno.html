@@ -3,4 +3,35 @@
 {% block content %}
 <h1>Bienvenido, {{ nombre_usuario }}</h1>
 <p>Aquí puedes gestionar tus cursos y notas.</p>
+
+<h2>Cursos Disponibles</h2>
+<div class="row">
+    {% if cursos %}
+        {% for curso in cursos %}
+            {% if curso.cupo > 0 %}  <!-- Verifica si hay cupo disponible -->
+                <div class="col-md-4 mb-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ curso.nombre }}</h5>
+                            <p class="card-text">Código: {{ curso.codigo }}</p>
+                            <p class="card-text">Costo: {{ curso.costo }}</p>
+                            <form action="{% url 'inscribirse_curso' %}" method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="curso_id" value="{{ curso.id }}">
+                                <button class="btn btn-info" type="submit">Inscribirse</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-warning" role="alert">
+            No hay cursos disponibles en este momento.
+        </div>
+    {% endif %}
+</div>
+
+<h2><a href="{% url 'ver_cursos_inscritos' %}">Ver Cursos Inscritos</a></h2>  <!-- Enlace a los cursos inscritos -->
+
 {% endblock %}

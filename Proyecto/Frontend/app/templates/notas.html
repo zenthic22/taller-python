@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+    <h1>Notas del Curso {{ curso_id }}</h1>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Apellido</th>
+                <th>Calificación</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for nota in notas %}
+                <tr>
+                    <td>{{ nota.nombre }}</td>
+                    <td>{{ nota.apellido }}</td>
+                    <td>
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="estudiante_id" value="{{ nota.id }}">
+                            <input type="number" name="calificacion" value="{{ nota.calificacion }}" min="0" max="100" required>
+                            <button type="submit">Guardar</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <a href="{% url 'descargar_notas' curso_id %}">Descargar Notas</a>
+{% endblock %}

@@ -1,20 +1,44 @@
 {% extends "base.html" %}
 {% load static %}
+
 {% block content %}
 <h1>Bienvenido, {{ nombre_usuario }}</h1>
-<p>Aquí puedes gestionar tus cursos y notas.</p>
 
-<!-- Agrega aquí más contenido o funcionalidades específicas para los catedráticos -->
+<!-- Sección de Gestión de Cursos -->
 <div>
     <h2>Gestión de Cursos</h2>
-    <p>Puedes agregar, editar o eliminar cursos desde esta sección.</p>
-    <!-- Aquí podrías incluir botones o enlaces a otras vistas relacionadas -->
-    <a href="{% url 'cursos_asignados' %}" class="btn btn-primary">Ver Cursos Asignados</a>
+    <div class="row">
+        {% for curso in cursos %}
+        <div class="col-md-4"> <!-- Tres tarjetas por fila en pantallas medianas -->
+            <div class="card mb-4">
+                <img src="data:image/png;base64,{{ curso.banner }}" class="card-img-top" alt="{{ curso.nombre }} Banner"> <!-- Cambiado -->
+                <div class="card-body">
+                    <h5 class="card-title">{{ curso.nombre }}</h5>
+                    <p class="card-text">Descripción: {{ curso.descripcion }}</p> <!-- Usando mensaje_bienvenida -->
+                    <p class="card-text">Horario: {{ curso.horario }}</p>
+                    <p class="card-text">Catedrático: {{ curso.catedratico }}</p>
+                    <a href="{% url 'editar_banner' curso.id %}" class="btn btn-primary">Editar Banner</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        
+        {% if not cursos %}
+        <p>No se encontraron cursos asignados para este catedrático.</p>
+        {% endif %}
+    </div>
 </div>
 
+<!-- Sección de Gestión de Notas -->
 <div>
     <h2>Gestión de Notas</h2>
-    <p>Puedes consultar y actualizar las notas de tus estudiantes aquí.</p>
-    <!-- Aquí podrías incluir botones o enlaces a otras vistas relacionadas -->
+    {% for curso in cursos %}
+        <a href="{% url 'descargar_registro_notas' curso_id=curso.id %}">Descargar Registro de Notas para {{ curso.nombre }}</a>
+    {% endfor %}
+    
+    {% if not cursos %}
+        <p>No se encontraron cursos asignados para este catedrático.</p>
+    {% endif %}
 </div>
+
 {% endblock %}

@@ -1,16 +1,21 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+from fpdf import FPDF
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from openpyxl import Workbook
+import datetime
 import base64
 import jwt
-import datetime
+import time
 import smtplib
 import pymysql
 import bcrypt
 import os
 import openpyxl
 import io
+import tempfile
+import random
 
 app = Flask(__name__)
 CORS(app)
@@ -290,6 +295,8 @@ def iniciar_sesion():
 
     if not usuario:
         return jsonify({"mensaje": "Usuario o contraseña incorrectos."}), 401
+    
+    print(f"Usuario encontrado: {usuario}")
 
     if usuario['account_locked']:
         return jsonify({"mensaje": "Cuenta bloqueada. Contacte al administrador."}), 403
@@ -305,6 +312,7 @@ def iniciar_sesion():
         nombre = usuario.get('nombre', 'Usuario desconocido')
         
         return jsonify({"mensaje": "Inicio de sesión exitoso", 
+                        "id": usuario["id"],
                         "rol_id": rol_id,
                         "nombre": nombre}), 200
     else:
@@ -468,6 +476,403 @@ def listar_catedraticos_cursos():
         print(f"Error al obtener la lista de catedráticos y cursos: {e}")
         return jsonify({"error": "Error al obtener la lista de catedráticos y cursos."}), 500
 
+    finally:
+        cursor.close()
+
+@app.route('/profesor/cursos/<int:usuario_id>', methods=['GET'])
+def obtener_cursos_profesor(usuario_id):
+    cursor = db_config.cursor()
+    try:
+        cursor.execute("""
+            SELECT c.id, c.nombre, c.codigo, c.costo, c.mensaje_bienvenida, c.horario, c.cupo, c.banner, c.estado, u.nombre
+            FROM Curso c
+            JOIN Catedratico ct ON c.catedratico_id = ct.id
+            JOIN Usuario u ON ct.usuario_id = u.id
+            WHERE ct.usuario_id = %s
+        """, (usuario_id,))
+        
+        cursos = cursor.fetchall()
+
+        if not cursos:  # Si no se encuentran cursos
+            print(f"No se encontraron cursos para el usuario ID: {usuario_id}")  # Para depuración
+            return jsonify({"message": "No se encontraron cursos para este catedrático."}), 404
+
+        lista_cursos = []
+        for curso in cursos:
+            lista_cursos.append({
+                'id': curso[0],
+                'nombre': curso[1],
+                'codigo': curso[2],
+                'costo': curso[3],
+                'descripcion': curso[4],  # Ahora usa `mensaje_bienvenida`
+                'horario': curso[5],
+                'cupo': curso[6],
+                'banner': curso[7],  # El banner será una ruta a la imagen
+                'estado': curso[8],
+                'catedratico': curso[9]
+            })
+
+        return jsonify(lista_cursos), 200
+
+    except Exception as e:
+        print(f"Error al obtener cursos: {str(e)}")  # Imprimir el error en la consola
+        return jsonify({"error": f"Ocurrió un error inesperado: {str(e)}"}), 500
+    finally:
+        cursor.close()
+
+@app.route('/profesor/editar_banner', methods=['POST'])
+def editar_banner():
+    datos = request.json
+    curso_id = datos.get('curso_id')
+    nuevo_banner = datos.get('banner')
+
+    if not curso_id or not nuevo_banner:
+        return jsonify({"error": "El curso_id y el banner son requeridos."}), 400
+
+    cursor = db_config.cursor()
+    try:
+        # Actualizar el banner del curso
+        cursor.execute("UPDATE Curso SET banner = %s WHERE id = %s", (nuevo_banner, curso_id))
+        db_config.commit()
+
+        return jsonify({"mensaje": "Banner actualizado exitosamente."}), 200
+
+    except Exception as e:
+        db_config.rollback()
+        print(f"Error al actualizar el banner: {e}")
+        return jsonify({"error": "Error al actualizar el banner."}), 500
+
+    finally:
+        cursor.close()
+
+@app.route('/cursos', methods=['GET'])
+def listar_cursos():
+    cursor = db_config.cursor(pymysql.cursors.DictCursor)
+    try:
+        cursor.execute("SELECT id, nombre, codigo, costo, cupo FROM Curso WHERE estado = 1")  # Asegúrate de incluir todos los campos necesarios
+        cursos = cursor.fetchall()
+        return jsonify(cursos), 200
+    except Exception as e:
+        print(f"Error al obtener la lista de cursos: {e}")
+        return jsonify({"error": "Error al obtener la lista de cursos"}), 500
+    finally:
+        cursor.close()
+        
+@app.route('/estudiante/inscribir', methods=['POST'])
+def inscribir_curso():
+    datos = request.json
+    estudiante_id = datos.get('estudiante_id')
+    curso_id = datos.get('curso_id')
+    
+    if not estudiante_id or not curso_id:
+        return jsonify({"error": "Se requiere estudiante_id y curso_id."}), 400
+
+    cursor = db_config.cursor()
+    try:
+        # Verificar que el curso existe y tiene cupo disponible
+        cursor.execute("SELECT cupo FROM Curso WHERE id = %s AND estado = 1", (curso_id,))
+        curso = cursor.fetchone()
+        if not curso:
+            return jsonify({"error": "El curso no existe o no está disponible."}), 404
+        
+        if curso[0] <= 0:
+            return jsonify({"error": "El curso no tiene cupos disponibles."}), 400
+
+        # Verificar si el estudiante ya está inscrito en el curso
+        cursor.execute("SELECT COUNT(*) FROM Inscripcion WHERE usuario_id = %s AND curso_id = %s", (estudiante_id, curso_id))
+        if cursor.fetchone()[0] > 0:
+            return jsonify({"error": "Ya estás inscrito en este curso."}), 400
+
+        # Obtener la fecha de inscripción usando time
+        fecha_inscripcion = time.strftime('%Y-%m-%d')  # Formato de fecha YYYY-MM-DD
+
+        # Registrar la inscripción
+        cursor.execute("INSERT INTO Inscripcion (usuario_id, curso_id, fecha_inscripcion) VALUES (%s, %s, %s)", 
+                       (estudiante_id, curso_id, fecha_inscripcion))
+        # Actualizar el cupo del curso
+        cursor.execute("UPDATE Curso SET cupo = cupo - 1 WHERE id = %s", (curso_id,))
+        db_config.commit()
+
+        # Enviar correo de confirmación
+        # Obtener el email del estudiante
+        cursor.execute("SELECT email FROM Estudiante WHERE usuario_id = %s", (estudiante_id,))
+        estudiante = cursor.fetchone()
+        if estudiante and estudiante[0]:
+            enviar_correo(
+                estudiante[0],
+                'Confirmación de inscripción',
+                f'Te has inscrito exitosamente en el curso con ID {curso_id}.'
+            )
+        
+        return jsonify({"mensaje": "Inscripción exitosa."}), 200
+    except Exception as e:
+        db_config.rollback()
+        print(f"Error al inscribirse en el curso: {e}")
+        return jsonify({"error": "Error al inscribirse en el curso."}), 500
+    finally:
+        cursor.close()
+
+@app.route('/estudiante/cursos/<int:estudiante_id>', methods=['GET'])
+def cursos_inscritos(estudiante_id):
+    cursor = db_config.cursor(pymysql.cursors.DictCursor)
+    try:
+        cursor.execute("""
+            SELECT c.* FROM Curso c
+            JOIN Inscripcion i ON c.id = i.curso_id
+            WHERE i.usuario_id = %s
+        """, (estudiante_id,))
+        cursos = cursor.fetchall()
+        return jsonify(cursos), 200
+    except Exception as e:
+        print(f"Error al obtener los cursos inscritos: {e}")
+        return jsonify({"error": "Error al obtener los cursos inscritos."}), 500
+    finally:
+        cursor.close()
+
+@app.route('/estudiante/desinscribir', methods=['POST'])
+def desinscribir_curso():
+    datos = request.json
+    estudiante_id = datos.get('estudiante_id')
+    curso_id = datos.get('curso_id')
+    
+    # Verificar que estudiante_id y curso_id estén presentes
+    if not estudiante_id or not curso_id:
+        return jsonify({"error": "Se requiere estudiante_id y curso_id."}), 400
+
+    cursor = db_config.cursor()
+    try:
+        # Verificar que el estudiante está inscrito en el curso
+        cursor.execute("SELECT COUNT(*) FROM Inscripcion WHERE usuario_id = %s AND curso_id = %s", (estudiante_id, curso_id))
+        if cursor.fetchone()[0] == 0:
+            return jsonify({"error": "No estás inscrito en este curso."}), 400
+
+        # Eliminar la inscripción
+        cursor.execute("DELETE FROM Inscripcion WHERE usuario_id = %s AND curso_id = %s", (estudiante_id, curso_id))
+        
+        # Incrementar el cupo del curso
+        cursor.execute("UPDATE Curso SET cupo = cupo + 1 WHERE id = %s", (curso_id,))
+        
+        db_config.commit()
+        return jsonify({"mensaje": "Desinscripción exitosa."}), 200
+
+    except Exception as e:
+        db_config.rollback()
+        print(f"Error al desinscribirse del curso: {e}")
+        return jsonify({"error": "Error al desinscribirse del curso."}), 500
+    finally:
+        cursor.close()
+
+@app.route('/estudiante/certificado/<int:curso_id>/<int:estudiante_id>', methods=['GET'])
+def descargar_certificado(curso_id, estudiante_id):
+    cursor = db_config.cursor()
+    try:
+        # Obtener la nota del estudiante en el curso
+        cursor.execute("""
+            SELECT n.nota FROM Nota n
+            JOIN Inscripcion i ON n.inscripcion_id = i.id
+            WHERE i.curso_id = %s AND i.usuario_id = %s
+        """, (curso_id, estudiante_id))
+        nota_result = cursor.fetchone()
+        if not nota_result:
+            return jsonify({"error": "No se encontró la nota del estudiante en este curso."}), 404
+
+        nota = nota_result[0]
+        if nota < 61:
+            return jsonify({"error": "La nota es insuficiente para obtener el certificado."}), 400
+
+        # Obtener datos del estudiante y del curso
+        cursor.execute("SELECT nombre, apellido FROM Usuario WHERE id = %s", (estudiante_id,))
+        estudiante = cursor.fetchone()
+        cursor.execute("SELECT nombre FROM Curso WHERE id = %s", (curso_id,))
+        curso = cursor.fetchone()
+
+        # Generar el certificado (ejemplo simple con PDF)
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=16)
+        pdf.cell(200, 10, txt="Certificado de Aprobación", ln=1, align='C')
+        pdf.set_font("Arial", size=12)
+        pdf.cell(200, 10, txt=f"Estudiante: {estudiante[0]} {estudiante[1]}", ln=2, align='L')
+        pdf.cell(200, 10, txt=f"Curso: {curso[0]}", ln=3, align='L')
+        pdf.cell(200, 10, txt=f"Nota: {nota}", ln=4, align='L')
+
+        # Crear un archivo temporal para guardar el PDF
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            pdf.output(tmp_file.name)  # Guardar el PDF en el archivo temporal
+            tmp_file.seek(0)  # Mover el puntero al inicio del archivo
+
+            # Enviar el PDF generado
+            return send_file(
+                tmp_file.name,
+                as_attachment=True,
+                download_name='certificado.pdf',
+                mimetype='application/pdf'
+            )
+    except Exception as e:
+        print(f"Error al generar el certificado: {e}")
+        return jsonify({"error": "Error al generar el certificado."}), 500
+    finally:
+        cursor.close()
+
+@app.route('/estudiante/completar_curso/<int:curso_id>', methods=['POST'])
+def completar_curso(curso_id):
+    # Obtener el usuario_id desde el cuerpo de la solicitud JSON
+    data = request.get_json()
+    usuario_id = data.get('usuario_id')
+
+    if not usuario_id:
+        return jsonify({"error": "Debes proporcionar tu ID de usuario."}), 403
+
+    # Generar una nota aleatoria
+    nota = random.uniform(0, 100)
+    nota = round(nota, 2)  # Redondear a 2 decimales
+
+    # Obtener el inscripcion_id basado en usuario_id y curso_id
+    inscripcion_id = obtener_inscripcion_id(usuario_id, curso_id)
+    if not inscripcion_id:
+        return jsonify({"error": "Inscripción no encontrada para este curso."}), 404
+
+    # Insertar la nota en la base de datos
+    cursor = db_config.cursor()
+    try:
+        cursor.execute("INSERT INTO Nota (inscripcion_id, nota) VALUES (%s, %s)", (inscripcion_id, nota))
+        db_config.commit()
+
+        # Verificar si la nota es suficiente para generar el certificado
+        if nota >= 61:
+            # Generar certificado
+            cursor.execute("INSERT INTO Certificado (inscripcion_id, fecha_emision) VALUES (%s, NOW())", (inscripcion_id,))
+            db_config.commit()
+
+        return jsonify({"nota": nota, "mensaje": "Curso completado. ¡Bien hecho!"})
+
+    except Exception as e:
+        db_config.rollback()  # Deshacer cambios en caso de error
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        cursor.close()
+
+def obtener_inscripcion_id(usuario_id, curso_id):
+    # Implementa esta función para obtener el inscripcion_id basado en usuario_id y curso_id
+    cursor = db_config.cursor()
+    cursor.execute("SELECT id FROM Inscripcion WHERE usuario_id = %s AND curso_id = %s", (usuario_id, curso_id))
+    result = cursor.fetchone()
+    cursor.close()
+    
+    return result[0] if result else None
+
+@app.route('/profesor/descargar_registro_notas/<int:curso_id>', methods=['GET'])
+def descargar_registro_notas(curso_id):
+    """Descarga el registro de notas de un curso en formato .xlsx."""
+    cursor = db_config.cursor()
+
+    try:
+        # Verificar si el curso existe
+        cursor.execute("SELECT COUNT(*) FROM Curso WHERE id = %s", (curso_id,))
+        if cursor.fetchone()[0] == 0:
+            return jsonify({"error": "Curso no encontrado."}), 404
+        
+        # Obtener las notas de los estudiantes en el curso
+        cursor.execute("""
+            SELECT u.nombre, u.apellido, n.nota
+            FROM Usuario u
+            JOIN Inscripcion i ON u.id = i.usuario_id
+            JOIN Nota n ON i.id = n.inscripcion_id
+            WHERE i.curso_id = %s
+        """, (curso_id,))
+        resultados = cursor.fetchall()
+
+        # Manejar caso de no encontrar resultados
+        if not resultados:
+            return jsonify({"error": "No hay notas disponibles para este curso."}), 404
+
+        # Crear un libro de trabajo y una hoja
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Registro de Notas"
+
+        # Agregar encabezados
+        ws.append(["Nombre", "Apellido", "Nota"])
+
+        # Agregar los datos
+        for nombre, apellido, nota in resultados:
+            ws.append([nombre, apellido, nota])
+
+        # Crear un objeto BytesIO para almacenar el archivo en memoria
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        # Devolver el archivo Excel como respuesta
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=f'registro_notas_curso_{curso_id}.xlsx',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+    except Exception as e:
+        print(f"Error al generar el registro de notas: {e}")
+        return jsonify({"error": "Error al generar el registro de notas."}), 500
+    finally:
+        cursor.close()
+        
+@app.route('/notas/<int:curso_id>', methods=['GET'])
+def obtener_notas(curso_id):
+    cursor = db_config.cursor(pymysql.cursors.DictCursor)
+    try:
+        cursor.execute("""
+            SELECT Usuario.nombre, Usuario.apellido, Nota.nota AS calificacion
+            FROM Nota
+            JOIN Inscripcion ON Nota.inscripcion_id = Inscripcion.id
+            JOIN Estudiante ON Inscripcion.usuario_id = Estudiante.usuario_id
+            JOIN Usuario ON Estudiante.usuario_id = Usuario.id
+            WHERE Inscripcion.curso_id = %s
+        """, (curso_id,))
+        notas = cursor.fetchall()
+        return jsonify(notas), 200
+    except Exception as e:
+        print(f"Error al obtener las notas del curso {curso_id}: {e}")
+        return jsonify({"error": "Error al obtener las notas"}), 500
+    finally:
+        cursor.close()
+
+@app.route('/descargar_notas/<int:curso_id>', methods=['GET'])
+def descargar_notas(curso_id):
+    cursor = db_config.cursor(pymysql.cursors.DictCursor)
+    try:
+        cursor.execute("""
+            SELECT Usuario.nombre, Usuario.apellido, Nota.nota AS calificacion
+            FROM Nota
+            JOIN Inscripcion ON Nota.inscripcion_id = Inscripcion.id
+            JOIN Estudiante ON Inscripcion.usuario_id = Estudiante.usuario_id
+            JOIN Usuario ON Estudiante.usuario_id = Usuario.id
+            WHERE Inscripcion.curso_id = %s
+        """, (curso_id,))
+        notas = cursor.fetchall()
+
+        # Crear un libro de trabajo de Excel
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Notas"
+
+        # Encabezados
+        sheet.append(["Nombre", "Apellido", "Calificación"])
+
+        # Agregar los datos
+        for nota in notas:
+            sheet.append([nota["nombre"], nota["apellido"], nota["calificacion"]])
+
+        # Guardar el archivo en memoria
+        archivo_excel = f"notas_curso_{curso_id}.xlsx"
+        workbook.save(archivo_excel)
+
+        # Devolver el archivo como una respuesta
+        return send_file(archivo_excel, as_attachment=True)
+
+    except Exception as e:
+        print(f"Error al descargar las notas del curso {curso_id}: {e}")
+        return jsonify({"error": "Error al descargar las notas"}), 500
     finally:
         cursor.close()
 

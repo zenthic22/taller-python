@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<h1>Cursos Inscritos</h1>
+<p>Bienvenido, {{ nombre_usuario }}</p>
+
+<div class="row">
+    {% if cursos_inscritos %}  <!-- Cambiar a cursos_inscritos -->
+        {% for curso in cursos_inscritos %}
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ curso.nombre }}</h5>
+                        <p class="card-text">Código: {{ curso.codigo }}</p>
+                        <p class="card-text">Costo: {{ curso.costo }}</p>
+                        
+                        <form action="{% url 'desinscribirse_curso' curso.id %}" method="post">
+                            {% csrf_token %}
+                            <button class="btn btn-danger" type="submit">Desinscribirse</button>
+                        </form>
+
+                        <form action="{% url 'completar_curso' curso.id %}" method="post" class="mt-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="usuario_id" value="{{ request.session.usuario_id }}">
+                            <button class="btn btn-success" type="submit">Completar Curso</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-warning" role="alert">
+            No estás inscrito en ningún curso.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

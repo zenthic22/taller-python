@@ -53,5 +53,30 @@
             {% endfor %}
         </tbody>
     </table>
+
+    <h2>Cursos Disponibles</h2>
+
+    <!-- Tabla de Cursos Disponibles -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Nombre del Curso</th>
+                <th>Código</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for curso in cursos %}
+            <tr>
+                <td>{{ curso.nombre }}</td>
+                <td>{{ curso.codigo }}</td>
+                <td>
+                    <a href="{% url 'obtener_notas' curso.id %}" class="btn btn-info">Ver Notas</a>
+                    <a href="{% url 'descargar_notas' curso.id %}" class="btn btn-success">Descargar Notas</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endblock %}

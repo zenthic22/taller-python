@@ -5,6 +5,14 @@ html, body {
     flex-direction: column;
 }
 
+.card {
+    transition: transform 0.2s; /* Agrega una transición suave */
+}
+
+.card:hover {
+    transform: scale(1.05); /* Aumenta el tamaño de la tarjeta al pasar el ratón */
+}
+
 /* El contenedor principal ocupará el espacio restante */
 .main-content {
     flex: 1;

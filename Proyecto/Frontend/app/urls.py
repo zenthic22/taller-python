@@ -16,5 +16,13 @@ urlpatterns = [
     path('descargar_listado_catedraticos/', views.descargar_listado_catedraticos, name='descargar_listado_catedraticos'),
     path('crear_curso/', views.crear_curso, name='crear_curso'),
     path('listar_catedraticos/', views.lista_catedraticos, name='listar_catedraticos'),
-    # path('gestionar_notas/', views.gestionar_notas, name='gestionar_notas'),
+    path('editar_banner/<int:curso_id>/', views.editar_banner, name='editar_banner'),
+    path('estudiante/inscribir/', views.inscribirse_curso, name='inscribirse_curso'),
+    path('estudiante/desinscribir/<int:curso_id>/', views.desinscribirse_curso, name='desinscribirse_curso'),
+    path('estudiante/certificado/<int:curso_id>/<int:estudiante_id>/', views.descargar_certificado, name='descargar_certificado'),
+    path('ver_cursos_inscritos/', views.ver_cursos_inscritos, name='ver_cursos_inscritos'),  # Añade esta línea
+    path('estudiante/completar_curso/<int:curso_id>/', views.completar_curso, name='completar_curso'),
+    path('descargar_registro_notas/<int:curso_id>/', views.descargar_registro_notas, name='descargar_registro_notas'),
+    path('notas/<int:curso_id>/', views.obtener_notas, name='obtener_notas'),
+    path('descargar_notas/<int:curso_id>/', views.descargar_notas, name='descargar_notas'),
 ]
