@@ -46,7 +46,7 @@ JOIN Curso c ON i.curso_id = c.id;
 
 SELECT c.id, c.nombre, c.cupo, c.estado 
 FROM Curso c 
-WHERE c.id = 2;
+WHERE c.id = 1;
 
 SELECT * FROM Inscripcion WHERE usuario_id = 6 AND curso_id = 1;
 select * from nota;
